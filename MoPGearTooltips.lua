@@ -1,73 +1,91 @@
-local _G, _ = _G or getfenv()
+local _G = _G or getfenv(0)
+local strfind = string.find
+local strsub = string.sub
+local strgsub = string.gsub
+local strlower = string.lower
+local tinsert = table.insert
+local getn = table.getn
 
 local Cooltip = CreateFrame("Frame", "Cooltip", GameTooltip)
 
+local statsDB = {
+    { stats=COOLTIP_PRIM_STATS,        color=COOLTIP_PRIM_STATS_COLOR },
+    { stats=COOLTIP_SEC_STATS.vanilla, color=COOLTIP_SEC_STATS_COLOR },
+}
+
+local originalTooltip = {}
+for i = 1, 30 do
+    tinsert(originalTooltip, i, { text = "", color = { r = 1, g = 1, b = 1, a = 1 }, })
+end
+
 function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
-    local stats = {}
-    local setbonuses = {}
 
     -- Collect all rows into lua table for analization
-    local originalTooltip = {}
+    for i = 1, 30 do
+        originalTooltip[i].text = ""
+        originalTooltip[i].color.r = 1
+        originalTooltip[i].color.g = 1
+        originalTooltip[i].color.b = 1
+        originalTooltip[i].color.a = 1
+    end
+
     for row = 1, 30 do
         local tooltipRow = _G[tooltipTypeStr .. 'TextLeft' .. row]
         if tooltipRow then
             local rowtext = tooltipRow:GetText()
             if rowtext then
-                originalTooltip[row] = {}
                 originalTooltip[row].text = rowtext
-                originalTooltip[row].color = {}
-                originalTooltip[row].color.r,
-                originalTooltip[row].color.g,
-                originalTooltip[row].color.b,
-                originalTooltip[row].color.a
-                    = tooltipRow:GetTextColor()
+                local r, g, b, a = tooltipRow:GetTextColor()
+                originalTooltip[row].color.r = r
+                originalTooltip[row].color.g = g
+                originalTooltip[row].color.b = b
+                originalTooltip[row].color.a = a
             end
         end
     end
 
     -- Find out if the tooltip we're looking at is a piece of gear
     -- and what row the stats we want to edit start at
-    stats.OrigLength = table.getn(originalTooltip)
-    stats.StartRow = 0
-    stats.EndRow = 0
-    setbonuses.StartRow = nil
+    local statsStartRow = 0
+    local statsEndRow = 0
+    local setbonusesStartRow = nil
     local isGear = false
 
-    for row = 1, stats.OrigLength do
+    for row = 1, 30 do
         -- Gear is guaranteed to be labeled with the slot it occupies.
-        for _, slot in ipairs(COOLTIP_GEARSLOTS) do
+        for _, slot in pairs(COOLTIP_GEARSLOTS) do
             if slot == originalTooltip[row].text then
                 isGear = true
-                stats.StartRow = row + 1
+                statsStartRow = row + 1
             end
         end
         local isEnchant, _ = Cooltip.parseEnchant(originalTooltip[row])
         if isEnchant or
-            string.find(originalTooltip[row].text, "Socket", 1, true) or -- TBC
-            string.find(originalTooltip[row].text, "Durability", 1, true) or
-            string.find(originalTooltip[row].text, "Classes:", 1, true) or
-            string.find(originalTooltip[row].text, "Item Level", 1, true) or -- WotLK
-            string.find(originalTooltip[row].text, "Requires Level", 1, true) or
-            string.find(originalTooltip[row].text, "—", 1, true) or -- emdash used only in rep reqs, like Requires The League of Arathor — Exalted
-            string.find(originalTooltip[row].text, "Equip:", 1, true) or
+            strfind(originalTooltip[row].text, "Socket", 1, true) or -- TBC
+            strfind(originalTooltip[row].text, "Durability", 1, true) or
+            strfind(originalTooltip[row].text, "Classes:", 1, true) or
+            strfind(originalTooltip[row].text, "Item Level", 1, true) or -- WotLK
+            strfind(originalTooltip[row].text, "Requires Level", 1, true) or
+            strfind(originalTooltip[row].text, "—", 1, true) or -- emdash used only in rep reqs, like Requires The League of Arathor — Exalted
+            strfind(originalTooltip[row].text, "Equip:", 1, true) or
             -- I know this next part is a complicated mess but this should catch every edge case
             (
-                string.find(originalTooltip[row].text, "+", 1, true) and -- Catch lines starting with positive stats
-                not string.find(originalTooltip[row].text, "-", 1, true) -- but not when both + and - on one line means elemental wep e.g. + 16 - 30 Nature Damage
+                strfind(originalTooltip[row].text, "+", 1, true) and -- Catch lines starting with positive stats
+                not strfind(originalTooltip[row].text, "-", 1, true) -- but not when both + and - on one line means elemental wep e.g. + 16 - 30 Nature Damage
             )
             or
             (
                 row > 2 and -- don't catch -'s in the item name nor turtle xmog
-                string.find(originalTooltip[row].text, "-", 1, true) and -- Catch items starting with negative stats
-                not string.find(originalTooltip[row].text, "Damage", 1, true) and -- But don't count Weapon Damage lines
-                not string.find(originalTooltip[row].text, "Hand", 1, true) and -- or the equip slot text Two-Hand, One-Hand
-                not string.find(originalTooltip[row].text, "Equipped", 1, true) -- or gear marked Unique-Equipped
+                strfind(originalTooltip[row].text, "-", 1, true) and -- Catch items starting with negative stats
+                not strfind(originalTooltip[row].text, "Damage", 1, true) and -- But don't count Weapon Damage lines
+                not strfind(originalTooltip[row].text, "Hand", 1, true) and -- or the equip slot text Two-Hand, One-Hand
+                not strfind(originalTooltip[row].text, "Equipped", 1, true) -- or gear marked Unique-Equipped
             )
         then
             -- We have found the first case of a +X Stat line,
             -- Or we have found that there are no normal stats and are at the bottom of where stats would be
             -- Either way we are definitely past the gear slot check.
-            stats.StartRow = row
+            statsStartRow = row
             break
         end
     end
@@ -76,15 +94,15 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     end
 
     -- find out if this gear has set bonuses where we end the stats section early
-    for row = stats.StartRow, stats.OrigLength do
-        if string.find(originalTooltip[row].text, "Set: ", 1, true) then
-            stats.EndRow = row - 1
-            setbonuses.StartRow = row
+    for row = statsStartRow, 30 do
+        if strfind(originalTooltip[row].text, "Set: ", 1, true) then
+            statsEndRow = row - 1
+            setbonusesStartRow = row
             break
         end
         -- if the above test never succeeds, the stats row
         -- will just naturally be the last row of the tooltip
-        stats.EndRow = row
+        statsEndRow = row
     end
 
     -- check if has Armor, Damage, Durability, Stats, Slots...
@@ -93,38 +111,35 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     -- Correct lines and then sort them, sort lines, put enchant, then dura/lv/etc at bottom
     local fixedTooltips = {}
     local unchangedTooltips = {}
-    for i = 1, stats.EndRow - stats.StartRow + 1 do
-        local row = i + stats.StartRow - 1
+    for i = 1, statsEndRow - statsStartRow + 1 do
+        local row = i + statsStartRow - 1
 
         local rowSlotted = false
         local isEnchant, replaceStr = Cooltip.parseEnchant(originalTooltip[row])
         if isEnchant then
-            table.insert(unchangedTooltips, {
+            tinsert(unchangedTooltips, {
                 text=replaceStr,
 --              color=originalTooltip[row].color
                 color=COOLTIP_ENCHANTS_COLOR
             })
             rowSlotted = true
-        elseif string.find(originalTooltip[row].text, "Chance on Hit:", 1, true) or
-            string.find(originalTooltip[row].text, "Use:", 1, true)
+        elseif strfind(originalTooltip[row].text, "Chance on Hit:", 1, true) or
+            strfind(originalTooltip[row].text, "Use:", 1, true)
         then
             -- These effects need to be left as is
             -- continue
         else
             -- Check against our db\Stats.lua table to see if this is a stat we can fix
-            for _, statSet in ipairs({
-                { stats=COOLTIP_PRIM_STATS,        color=COOLTIP_PRIM_STATS_COLOR },
-                { stats=COOLTIP_SEC_STATS.vanilla, color=COOLTIP_SEC_STATS_COLOR },
-            }) do
+            for _, statSet in ipairs(statsDB) do
                 -- stat = { searchStr, valuePrefixStr, valueSuffixStr, newSuffixStr }
                 for _,stat in ipairs(statSet.stats) do
-                    if string.find(originalTooltip[row].text, stat[1], 1, false) then
-                        local sign = string.find(originalTooltip[row].text, "^%-", 1, false) and "-" or "+"
-                        local suffixRemoved = string.gsub(originalTooltip[row].text, stat[3], "")
-                        local foundValue = string.gsub(suffixRemoved, stat[2], "")
+                    if strfind(originalTooltip[row].text, stat[1], 1, false) then
+                        local sign = strfind(originalTooltip[row].text, "^%-", 1, false) and "-" or "+"
+                        local suffixRemoved = strgsub(originalTooltip[row].text, stat[3], "")
+                        local foundValue = strgsub(suffixRemoved, stat[2], "")
                         if foundValue then
-                            foundValue = string.gsub(foundValue, "Equip: ", "")
-                            table.insert(fixedTooltips, {
+                            foundValue = strgsub(foundValue, "Equip: ", "")
+                            tinsert(fixedTooltips, {
                                 text=sign .. foundValue .. " " .. stat[4],
                                 color=statSet.color,
                             })
@@ -137,7 +152,7 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
         -- this isn't an enchant nor a stat we've corrected.
         -- put it in unchangedTooltips
         if not rowSlotted then
-            table.insert(unchangedTooltips, {
+            tinsert(unchangedTooltips, {
                 text=originalTooltip[row].text,
                 color=originalTooltip[row].color
             })
@@ -145,14 +160,14 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     end
 
     -- Combine fixedTooltips with unchangedTooltips
-    for i = 1, table.getn(unchangedTooltips) do
-        table.insert(fixedTooltips, unchangedTooltips[i])
+    for i = 1, getn(unchangedTooltips) do
+        tinsert(fixedTooltips, unchangedTooltips[i])
     end
 
     -- Insert data from start to end row
-    stats.Length = table.getn(fixedTooltips)
-    for i = 1, stats.Length do
-        local row = i + stats.StartRow - 1
+    local statsLength = getn(fixedTooltips)
+    for i = 1, statsLength do
+        local row = i + statsStartRow - 1
         _G[tooltipTypeStr .. 'TextLeft' .. row]:SetText(fixedTooltips[i].text)
         _G[tooltipTypeStr .. 'TextLeft' .. row]:SetTextColor(
             fixedTooltips[i].color.r,
@@ -164,7 +179,7 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     tooltip:Show()
 
 
-    if not setbonuses.StartRow then
+    if not setbonusesStartRow then
         return
     end
 
@@ -172,22 +187,19 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     -- all in one go since we don't need to rearrange any lines here, they are in proper order.
     -- A repeat of code above, but compacted and with checks only relevant for sets
     -- Could use refactor
-    for row = setbonuses.StartRow, stats.OrigLength do
-        for _, statSet in ipairs({
-                { stats=COOLTIP_PRIM_STATS,        color=COOLTIP_PRIM_STATS_COLOR },
-                { stats=COOLTIP_SEC_STATS.vanilla, color=COOLTIP_SEC_STATS_COLOR },
-        }) do
+    for row = setbonusesStartRow, 30 do
+        for _, statSet in ipairs(statsDB) do
             -- stat = { searchStr, valuePrefixStr, valueSuffixStr, newSuffixStr }
             for _,stat in ipairs(statSet.stats) do
-                if string.find(originalTooltip[row].text, stat[1], 1, false) then
-                    local suffixRemoved = string.gsub(originalTooltip[row].text, stat[3], "")
-                    local foundValue = string.gsub(suffixRemoved, stat[2], "")
+                if strfind(originalTooltip[row].text, stat[1], 1, false) then
+                    local suffixRemoved = strgsub(originalTooltip[row].text, stat[3], "")
+                    local foundValue = strgsub(suffixRemoved, stat[2], "")
                     if foundValue then
                         local setPrefix = ""
-                        local statStart, foundValueStart = string.find(foundValue, "Set: ", 1, true)
-                        setPrefix = string.sub(foundValue, 1, foundValueStart)
-                        foundValue = string.gsub(foundValue, ".*Set: ", "")
-                        foundValue = string.gsub(foundValue, "%.", "") -- There are an awful amount of set bonuses with random ass periods wtf
+                        local statStart, foundValueStart = strfind(foundValue, "Set: ", 1, true)
+                        setPrefix = strsub(foundValue, 1, foundValueStart)
+                        foundValue = strgsub(foundValue, ".*Set: ", "")
+                        foundValue = strgsub(foundValue, "%.", "") -- There are an awful amount of set bonuses with random ass periods wtf
                         _G[tooltipTypeStr .. 'TextLeft' .. row]:SetText(
                             setPrefix .. "+" .. foundValue .. " " .. stat[4])
                         _G[tooltipTypeStr .. 'TextLeft' .. row]:SetTextColor(
@@ -203,16 +215,16 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     end
 end
 
+local enchantsDB = {COOLTIP_ENCHANTS.vanilla,}
+
 function Cooltip.parseEnchant(row)
     if row.color.r == 0 and  --
         row.color.b == 0 and -- Green
         row.color.g > 0.999  --
     then
-        for _, enchantSet in ipairs({
-            COOLTIP_ENCHANTS.vanilla,
-        }) do
+        for _, enchantSet in ipairs(enchantsDB) do
             for _, item in ipairs(enchantSet) do
-                if string.lower(row.text) == string.lower(item[1]) then
+                if strlower(row.text) == strlower(item[1]) then
                     return true, item[2] or item[1]
                 end
             end
@@ -236,7 +248,7 @@ Cooltip:SetScript("OnShow", function()
         end
     end
     if GameTooltip.itemLink then
-        local _, _, itemLink = string.find(GameTooltip.itemLink, "(item:%d+:%d+:%d+:%d+)");
+        local _, _, itemLink = strfind(GameTooltip.itemLink, "(item:%d+:%d+:%d+:%d+)");
         if not itemLink then
             return false
         end
