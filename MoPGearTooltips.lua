@@ -4,6 +4,7 @@ local strsub = string.sub
 local strgsub = string.gsub
 local strlower = string.lower
 local tinsert = table.insert
+local tremove = table.remove
 local getn = table.getn
 
 local Cooltip = CreateFrame("Frame", "Cooltip", GameTooltip)
@@ -13,13 +14,50 @@ local statsDB = {
     { stats=COOLTIP_SEC_STATS.vanilla, color=COOLTIP_SEC_STATS_COLOR },
 }
 
+local function twipe(t)
+    for i = getn(t), 1, -1 do
+        tremove(t, i)
+    end
+end
+
 local originalTooltip = {}
 for i = 1, 30 do
     tinsert(originalTooltip, i, { text = "", color = { r = 1, g = 1, b = 1, a = 1 }, })
 end
 
-function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
+local fixedTooltips = {}
+local unchangedTooltips = {}
 
+local function save(tooltipTypeStr)
+    for i = 1, 30 do
+        originalTooltip[i].text = _G[tooltipTypeStr .. 'TextLeft' .. i]:GetText() or ""
+        local r, g, b, a = _G[tooltipTypeStr .. 'TextLeft' .. i]:GetTextColor()
+        originalTooltip[i].color.r = r
+        originalTooltip[i].color.g = g
+        originalTooltip[i].color.b = b
+        originalTooltip[i].color.a = a
+    end
+end
+
+local lastLink
+
+function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
+    if tooltip.itemLink == lastLink then
+        for row = 1, 30 do
+            if originalTooltip[row].text ~= "" then
+                _G[tooltipTypeStr .. 'TextLeft' .. row]:SetText(originalTooltip[row].text)
+                _G[tooltipTypeStr .. 'TextLeft' .. row]:SetTextColor(
+                    originalTooltip[row].color.r,
+                    originalTooltip[row].color.g,
+                    originalTooltip[row].color.b,
+                    originalTooltip[row].color.a)
+                _G[tooltipTypeStr .. 'TextLeft' .. row]:Show()
+            end
+        end
+        tooltip:Show()
+        return
+    end
+    lastLink = tooltip.itemLink
     -- Collect all rows into lua table for analization
     for i = 1, 30 do
         originalTooltip[i].text = ""
@@ -109,17 +147,17 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     -- Get all stats, enchants, and meta info like dura, lv
 
     -- Correct lines and then sort them, sort lines, put enchant, then dura/lv/etc at bottom
-    local fixedTooltips = {}
-    local unchangedTooltips = {}
+    twipe(fixedTooltips)
+    twipe(unchangedTooltips)
+
     for i = 1, statsEndRow - statsStartRow + 1 do
         local row = i + statsStartRow - 1
-
         local rowSlotted = false
         local isEnchant, replaceStr = Cooltip.parseEnchant(originalTooltip[row])
+
         if isEnchant then
             tinsert(unchangedTooltips, {
                 text=replaceStr,
---              color=originalTooltip[row].color
                 color=COOLTIP_ENCHANTS_COLOR
             })
             rowSlotted = true
@@ -178,8 +216,8 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
     end
     tooltip:Show()
 
-
     if not setbonusesStartRow then
+        save(tooltipTypeStr)
         return
     end
 
@@ -213,6 +251,7 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
             end
         end
     end
+    save(tooltipTypeStr)
 end
 
 local enchantsDB = {COOLTIP_ENCHANTS.vanilla,}
@@ -289,9 +328,9 @@ Cooltip.HookAddonOrVariable("AtlasLoot", function()
             if itemName then
                 local _, _, _, hex = GetItemQualityColor(tonumber(itemQuality))
                 AtlasLootTooltip.itemLink = hex.. "|H"..itemString.."|h["..itemName.."]|h|r"
+                Cooltip.adjustTooltip(AtlasLootTooltip, "AtlasLootTooltip")
             end
         end
-        Cooltip.adjustTooltip(AtlasLootTooltip, "AtlasLootTooltip")
     end)
 
     atlas2:SetScript("OnShow", function()
@@ -301,8 +340,15 @@ Cooltip.HookAddonOrVariable("AtlasLoot", function()
             if itemName then
                 local _, _, _, hex = GetItemQualityColor(tonumber(itemQuality))
                 AtlasLootTooltip2.itemLink = hex.. "|H"..hyperLink.."|h["..itemName.."]|h|r"
+                Cooltip.adjustTooltip(AtlasLootTooltip2, "AtlasLootTooltip2")
             end
         end
-        Cooltip.adjustTooltip(AtlasLootTooltip2, "AtlasLootTooltip2")
+    end)
+
+    atlas:SetScript("OnHide", function()
+        AtlasLootTooltip.itemLink = nil
+    end)
+    atlas2:SetScript("OnHide", function()
+        AtlasLootTooltip2.itemLink = nil
     end)
 end)
