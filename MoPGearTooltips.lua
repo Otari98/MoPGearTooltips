@@ -40,11 +40,11 @@ local function save(tooltipTypeStr)
 end
 
 local lastLink
-
+local lastTooltip
 function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
-    if tooltip.itemLink == lastLink then
+    if tooltip.itemLink == lastLink and lastTooltip == tooltip then
         for row = 1, 30 do
-            if originalTooltip[row].text ~= "" then
+            if originalTooltip[row].text ~= "" and row <= tooltip:NumLines() then
                 _G[tooltipTypeStr .. 'TextLeft' .. row]:SetText(originalTooltip[row].text)
                 _G[tooltipTypeStr .. 'TextLeft' .. row]:SetTextColor(
                     originalTooltip[row].color.r,
@@ -58,6 +58,7 @@ function Cooltip.adjustTooltip(tooltip, tooltipTypeStr)
         return
     end
     lastLink = tooltip.itemLink
+    lastTooltip = tooltip
     -- Collect all rows into lua table for analization
     for i = 1, 30 do
         originalTooltip[i].text = ""
