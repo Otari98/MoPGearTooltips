@@ -354,6 +354,6 @@ Cooltip.HookAddonOrVariable("AtlasLoot", function()
     end)
 end)
 
-ItemRefTooltip:SetCript("OnHide", function()
+ItemRefTooltip:SetScript("OnHide", function()
     ItemRefTooltip.itemLink = nil
 end)
