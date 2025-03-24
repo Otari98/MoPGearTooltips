@@ -176,6 +176,9 @@ end
 local HookSetMerchantCompareItem = ShoppingTooltip1.SetMerchantCompareItem
 function ShoppingTooltip1.SetMerchantCompareItem(self, buttonID, tooltipIndex)
   local link = GameTooltip.itemLink
+  if not link then
+    return HookSetMerchantCompareItem(self, buttonID, tooltipIndex)
+  end
   local _, _, id = string.find(link, "item:(%d+)")
   local _, _, _, _, _, _, _, invtype = GetItemInfo(id)
   local index1, index2 = slot_index(invtype)
@@ -187,6 +190,9 @@ end
 local HookSetAuctionCompareItem = ShoppingTooltip1.SetAuctionCompareItem
 function ShoppingTooltip1.SetAuctionCompareItem(self, type, index, tooltipIndex)
   local link = GameTooltip.itemLink
+  if not link then
+    return HookSetAuctionCompareItem(self, type, index, tooltipIndex)
+  end
   local _, _, id = string.find(link, "item:(%d+)")
   local _, _, _, _, _, _, _, invtype = GetItemInfo(id)
   local index1, index2 = slot_index(invtype)
